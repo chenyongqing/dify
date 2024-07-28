@@ -4,6 +4,7 @@ from typing import Optional, Union, cast
 
 import requests
 
+from core.model_runtime.callbacks.base_callback import Callback
 from core.model_runtime.entities.common_entities import I18nObject
 from core.model_runtime.entities.llm_entities import LLMMode, LLMResult, LLMResultChunk, LLMResultChunkDelta
 from core.model_runtime.entities.message_entities import (
@@ -80,6 +81,30 @@ class MoonshotLargeLanguageModel(OAIAPICompatLargeLanguageModel):
                     type=ParameterType.FLOAT,
                 ),
             ]
+        )
+
+    def _code_block_mode_wrapper(self, model: str, credentials: dict, prompt_messages: list[PromptMessage],
+                                 model_parameters: dict, tools: Optional[list[PromptMessageTool]] = None,
+                                 stop: Optional[list[str]] = None, stream: bool = True, user: Optional[str] = None,
+                                 callbacks: list[Callback] = None) -> Union[LLMResult, Generator]:
+        """
+        Code block mode wrapper for invoking large language model
+        """
+        # transform response format
+        if 'response_format' in model_parameters and model_parameters['response_format'] in ['json_object', 'text']:
+            model_parameters['response_format'] = {"type": model_parameters['response_format']}
+        else:
+            model_parameters.pop('response_format')
+
+        return self._invoke(
+            model=model,
+            credentials=credentials,
+            prompt_messages=prompt_messages,
+            model_parameters=model_parameters,
+            tools=tools,
+            stop=stop,
+            stream=stream,
+            user=user
         )
 
     def _add_custom_parameters(self, credentials: dict) -> None:
