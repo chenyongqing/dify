@@ -15,31 +15,37 @@ concurrency:
 env:
   DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
   DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-  DIFY_WEB_IMAGE_NAME: ${{ vars.DIFY_WEB_IMAGE_NAME || 'chenyongqing/dify-web' }}
-  DIFY_API_IMAGE_NAME: ${{ vars.DIFY_API_IMAGE_NAME || 'chenyongqing/dify-api' }}
+  DIFY_WEB_IMAGE_NAME: ${{ vars.DIFY_WEB_IMAGE_NAME || 'langgenius/dify-web' }}
+  DIFY_API_IMAGE_NAME: ${{ vars.DIFY_API_IMAGE_NAME || 'langgenius/dify-api' }}
 
 jobs:
   build:
-    # 使用默认的ubuntu-latest运行器
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'arm64_runner' || 'ubuntu-latest' }}
     if: github.repository == 'chenyongqing/dify'
     strategy:
       matrix:
-        # 只保留AMD64的配置
-        - service_name: "build-api-amd64"
-          image_name_env: "DIFY_API_IMAGE_NAME"
-          context: "api"
-          platform: linux/amd64
-        - service_name: "build-web-amd64"
-          image_name_env: "DIFY_WEB_IMAGE_NAME"
-          context: "web"
-          platform: linux/amd64
+        include:
+          - service_name: "build-api-amd64"
+            image_name_env: "DIFY_API_IMAGE_NAME"
+            context: "api"
+            platform: linux/amd64
+          - service_name: "build-api-arm64"
+            image_name_env: "DIFY_API_IMAGE_NAME"
+            context: "api"
+            platform: linux/arm64
+          - service_name: "build-web-amd64"
+            image_name_env: "DIFY_WEB_IMAGE_NAME"
+            context: "web"
+            platform: linux/amd64
+          - service_name: "build-web-arm64"
+            image_name_env: "DIFY_WEB_IMAGE_NAME"
+            context: "web"
+            platform: linux/arm64
 
     steps:
       - name: Prepare
         run: |
           platform=${{ matrix.platform }}
-          # 确保PLATFORM_PAIR变量设置正确
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
       - name: Login to Docker Hub
@@ -48,9 +54,8 @@ jobs:
           username: ${{ env.DOCKERHUB_USER }}
           password: ${{ env.DOCKERHUB_TOKEN }}
 
-      # 由于不再需要支持ARM64，可以移除QEMU设置步骤
-      # - name: Set up QEMU
-      #   uses: docker/setup-qemu-action@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -65,14 +70,13 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
-          context: "${{ matrix.context }}"
+          context: "{{defaultContext}}:${{ matrix.context }}"
           platforms: ${{ matrix.platform }}
           build-args: COMMIT_SHA=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env[matrix.image_name_env] }},push-by-digest=true,name-canonical=true,push=true
-          # 由于只有一个平台，可以移除cache-from和cache-to中的scope配置
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.service_name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service_name }}
 
       - name: Export digest
         run: |
@@ -94,13 +98,13 @@ jobs:
     if: github.repository == 'chenyongqing/dify'
     strategy:
       matrix:
-        - service_name: "merge-api-images"
-          image_name_env: "DIFY_API_IMAGE_NAME"
-          context: "api"
-        - service_name: "merge-web-images"
-          image_name_env: "DIFY_WEB_IMAGE_NAME"
-          context: "web"
-
+        include:
+          - service_name: "merge-api-images"
+            image_name_env: "DIFY_API_IMAGE_NAME"
+            context: "api"
+          - service_name: "merge-web-images"
+            image_name_env: "DIFY_WEB_IMAGE_NAME"
+            context: "web"
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
@@ -130,7 +134,7 @@ jobs:
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-          $(printf '${{ env[matrix.image_name_env] }}@sha256:%s ' *)
+            $(printf '${{ env[matrix.image_name_env] }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
