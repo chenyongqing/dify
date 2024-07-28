@@ -29,10 +29,6 @@ jobs:
             image_name_env: "DIFY_API_IMAGE_NAME"
             context: "api"
             platform: linux/amd64
-          - service_name: "build-web-amd64"
-            image_name_env: "DIFY_WEB_IMAGE_NAME"
-            context: "web"
-            platform: linux/amd64
 
     steps:
       - name: Prepare
@@ -94,9 +90,6 @@ jobs:
           - service_name: "merge-api-images"
             image_name_env: "DIFY_API_IMAGE_NAME"
             context: "api"
-          - service_name: "merge-web-images"
-            image_name_env: "DIFY_WEB_IMAGE_NAME"
-            context: "web"
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
