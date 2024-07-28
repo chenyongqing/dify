@@ -3,6 +3,7 @@ from collections.abc import Generator
 from typing import Optional, Union, cast
 
 import requests
+
 from core.model_runtime.callbacks.base_callback import Callback
 from core.model_runtime.entities.common_entities import I18nObject
 from core.model_runtime.entities.llm_entities import LLMMode, LLMResult, LLMResultChunk, LLMResultChunkDelta
